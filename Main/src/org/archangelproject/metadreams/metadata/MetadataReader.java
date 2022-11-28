@@ -12,6 +12,7 @@ public abstract class MetadataReader implements IMetadataReader {
 		if(filepath!=null) {
 			this.file=new File(filepath);
 			if(!this.file.exists()) throw new MetadataException("The specified file does not exist");
+			if(this.file.isDirectory()) throw new MetadataException("The specified file is a directory");
 		}
 		else new MetadataException("The filepath must contain the path to the file");
 	}
