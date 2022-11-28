@@ -12,6 +12,6 @@ Program that reads the metadata from a file. To be used in the command line runn
 ## [v 0.1](https://github.com/archangelproject/MetaDreams/releases/tag/v0.1)
 Initially designed to simply read the metadata from the images generated using Stable Diffusion. So it only works with images so far.
 
-[Download the jar file.](https://github.com/archangelproject/MetaDreams/releases/download/v0.1/metadreams.jar)
+[Download the jar file.](https://github.com/archangelproject/MetaDreams/releases/download/v0.1/metadreams_v0.1.jar)
 
 > Written with [StackEdit](https://stackedit.io/).
