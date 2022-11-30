@@ -17,7 +17,7 @@ public class Main {
 	
 	private static int parse(String[] args, int index) {
 		int i = index;
-		String command = args[i].substring(0, 2);
+		String command = args[i].substring(0, 2); //only single letter parameters allowed with this setup
 		switch(command) {
 		case "-f":
 			try {
