@@ -1,4 +1,4 @@
-package org.archangelproject.metadreams.png;
+package org.archangelproject.metadreams.metadata.image.png;
 
 import java.io.File;
 import java.io.IOException;

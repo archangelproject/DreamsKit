@@ -4,9 +4,10 @@ public class MetadataNode {
 
 	private String keyword;
 	private String value;
+	private String description;
 	
 	public MetadataNode() {
-		setKeyword(setValue(""));
+		setKeyword(setValue(setDescription("")));
 	}
 	
 	public MetadataNode(String keyword, String value) {
@@ -15,14 +16,16 @@ public class MetadataNode {
 		
 		this.setKeyword(keyword.trim());
 		this.setValue(value);
+		this.setDescription("");
 	}
 
 	public String getKeyword() {
 		return keyword;
 	}
 
-	public void setKeyword(String keyword) {
+	public String setKeyword(String keyword) {
 		this.keyword = keyword;
+		return keyword;
 	}
 
 	public String getValue() {
@@ -32,6 +35,15 @@ public class MetadataNode {
 	public String setValue(String value) {
 		this.value = value;
 		return value;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public String setDescription(String description) {
+		this.description = description;
+		return this.description;
 	}
 	
 	public String toString() {
