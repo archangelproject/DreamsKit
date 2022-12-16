@@ -58,7 +58,7 @@ public class Main {
 						ImageDimension dimension;
 						for (int j = 0; j < files.length; j++) {
 							if(!files[j].isDirectory()) {
-								try {
+								try { //Catch the MetadataException to ignore the files that are not PNG
 									xmlDream = new XMLDream(files[j].getName());
 									reader = new PNGReader(files[j]);
 									dimension = reader.getSize();
@@ -70,10 +70,8 @@ public class Main {
 									}
 									xmlFolder.addDream(xmlDream);
 								}
-								catch(Exception except) {
-									//TODO: Better handling of the exception to discard the files which are not dreams
-									// and handle the real exceptions
-									//except.printStackTrace();
+								catch(MetadataException except) {
+									//Not a PNG file, ignore
 								}
 							}
 						}

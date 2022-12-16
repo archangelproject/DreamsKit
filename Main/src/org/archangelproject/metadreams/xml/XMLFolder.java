@@ -10,6 +10,7 @@ import java.util.Set;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
@@ -106,7 +107,9 @@ public class XMLFolder {
 			}
 	        
 	        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+	        transformerFactory.setAttribute("indent-number", 4);
 	        Transformer transformer = transformerFactory.newTransformer();
+	        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
 	        DOMSource source = new DOMSource(doc);
 	        this.xmlFilepath = this.folderPath+File.separator+XMLKeys.XML_MAIN_FILENAME;
 	        File outputFile = new File(this.xmlFilepath);
