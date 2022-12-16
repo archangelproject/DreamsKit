@@ -43,6 +43,7 @@ public class Main {
 				} catch (MetadataException e) {
 					System.out.println(e.getMessage());
 				}
+				break;
 			
 			case "-F":
 				try {
@@ -89,6 +90,7 @@ public class Main {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+				break;
 		}
 		return i;
 	}
