@@ -15,6 +15,7 @@ def process_png_file(file, verbose=False):
             metadata = im.info
             size = im.size
     except OSError as e:
+        # handle the error and provide a more informative error message
         print(f"Error processing {file}: {e}")
         return None, None
 
@@ -81,15 +82,20 @@ def create_xml_document(folder, verbose=False):
 
 def write_xml_document(folder, filename, verbose):
     """Write an XML document to a file."""
-    # Create XML document
-    xml_string = create_xml_document(folder, verbose=verbose)
+    try:
+        # Create XML document
+        xml_string = create_xml_document(folder, verbose=verbose)
     
-    # Write XML document to file
-    output_path = os.path.join(str(folder), str(filename))
-    with open(output_path, "w") as f:
-        f.write(xml_string)
+        # Write XML document to file
+        output_path = os.path.join(str(folder), str(filename))
+        with open(output_path, "w") as f:
+            f.write(xml_string)
     
-    printVerbose(verbose, f"XML file created: {output_path}")
+        printVerbose(verbose, f"XML file created: {output_path}")
+    except OSError as e:
+        # handle the error and provide a more informative error message
+        print(f"Error writing XML file: {e}")
+
 
 def extract_dreams(verbose, doc):
     """Extract the "Dream" field from the metadata and store it in a file."""
@@ -124,7 +130,7 @@ def printVerbose(verbose, message):
     if verbose:
         print(message)
 
-__version__ = "v.0.5.3"
+__version__ = "v.0.5.4"
 
 def main():
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
