@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import xml.etree.ElementTree as ET
+from xml.dom import minidom
 
 from PIL import Image
 
@@ -72,16 +73,21 @@ def create_xml_document(folder, verbose=False):
 
     # create an XML document from the root element
     doc = ET.ElementTree(root)
-    return doc
+
+    # create a pretty string representation of the XML document
+    xml_string = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
+
+    return xml_string
 
 def write_xml_document(folder, filename, verbose):
     """Write an XML document to a file."""
     # Create XML document
-    doc = create_xml_document(folder, verbose=verbose)
+    xml_string = create_xml_document(folder, verbose=verbose)
     
     # Write XML document to file
     output_path = os.path.join(str(folder), str(filename))
-    doc.write(output_path, encoding="utf-8", xml_declaration=True)
+    with open(output_path, "w") as f:
+        f.write(xml_string)
     
     printVerbose(verbose, f"XML file created: {output_path}")
 
@@ -100,29 +106,32 @@ def extract_dreams(verbose, doc):
 
     return dreams
 
-def write_dreams(verbose, dreams, output_file):
+def write_dreams(verbose, dreams, output_file, output_generation):
     # write the dreams to the output file
     with open(output_file, "w") as f:
+        if output_generation:
+            printVerbose(verbose, f"Output to be added: {output_generation}")
         for dream in dreams:
+            if output_generation:
+                dream = dream + " -o " + output_generation
             f.write(dream + "\n")
 
-def create_dreams_file(verbose, doc, output_file):
-    write_dreams(verbose, extract_dreams(verbose, doc), output_file)
+def create_dreams_file(verbose, doc, output_file, output_generation):
+    write_dreams(verbose, extract_dreams(verbose, doc), output_file, output_generation)
     printVerbose(verbose, f"Created file: {output_file}")
     
 def printVerbose(verbose, message):
     if verbose:
         print(message)
 
-__version__ = "v.0.5.1"
+__version__ = "v.0.5.3"
 
 def main():
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
     parser.add_argument("-f", "--file", help="Path to a PNG file")
     parser.add_argument("-F", "--folder", help="Path to a folder. File (metadata.xml) will be created with all the metadata information")
-    #parser.add_argument("-x", "--xml", help="XML output file name (default: metadata.xml)", default="metadata.xml")
     parser.add_argument("-d", "--dreams", help="Generate a file (prompts.sdp) with the prompts to create the images stored in the xml file")
-    #parser.add_argument("-p", "--prompts", help="SDP output file name for the prompts (default: prompts.sdp)", default="prompts.sdp")
+    parser.add_argument("-o", "--output", help="Add the argument -o to each prompt stored in the prompts file")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--version", action="version", version=__version__)
     
@@ -130,11 +139,10 @@ def main():
 
     png_file = args.file
     folder = args.folder
-    #xml_file = args.xml
     xml_file = "metadata.xml"
     dreams = args.dreams
-    #prompts = args.prompts
     prompts = "prompts.sdp"
+    output = args.output
     verbose = args.verbose
     
     if verbose:
@@ -179,7 +187,7 @@ def main():
             printVerbose(verbose, f"Parsing the file {full_xml_filepath}")
                 
             doc = ET.parse(full_xml_filepath)
-            create_dreams_file(verbose, doc, os.path.join(dreams, prompts))
+            create_dreams_file(verbose, doc, os.path.join(dreams, prompts), output)
         except OSError as e:
             print(f"Error processing the dreams in the folder {dreams}: {e}")
          
