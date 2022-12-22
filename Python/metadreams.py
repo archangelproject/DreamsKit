@@ -94,12 +94,13 @@ def write_xml_document(folder, filename, verbose):
         printVerbose(verbose, f"XML file created: {output_path}")
     except OSError as e:
         # handle the error and provide a more informative error message
-        print(f"Error writing XML file: {e}")
+        print(f"Error writing XML file {folder}: {type(e)}: {e}")
 
 
-def extract_dreams(verbose, doc):
-    """Extract the "Dream" field from the metadata and store it in a file."""
+def extract_dreams(xml_filepath, verbose):
+    """Extract the "Dream" field from the metadata file and returns an array with the dreams"""
     dreams = []
+    doc = ET.parse(xml_filepath)
 
     # loop through all the image elements in the document
     for image in doc.iter("image"):
@@ -112,7 +113,7 @@ def extract_dreams(verbose, doc):
 
     return dreams
 
-def write_dreams(verbose, dreams, output_file, output_generation):
+def write_dreams(dreams, output_file, output_generation, verbose):
     # write the dreams to the output file
     with open(output_file, "w") as f:
         if output_generation:
@@ -122,21 +123,33 @@ def write_dreams(verbose, dreams, output_file, output_generation):
                 dream = dream + " -o " + output_generation
             f.write(dream + "\n")
 
-def create_dreams_file(verbose, doc, output_file, output_generation):
-    write_dreams(verbose, extract_dreams(verbose, doc), output_file, output_generation)
-    printVerbose(verbose, f"Created file: {output_file}")
+def create_dreams_file(folder, prompt_filename, output_argument, xml_file, verbose):
+    #Check if the file metadata.xml exists in the folder specified in the argument dreams.
+    if not os.path.isfile(os.path.join(folder, xml_file)):
+        #The xml file has not been generated yet. Generate the xml file
+        printVerbose(verbose, f"File {xml_file} not found. Generating new file")
+        write_xml_document(folder, xml_file, verbose)
+        
+    #Read the xml file and put every dream in the sdp file
+    full_xml_filepath = os.path.join(folder, xml_file)
+    printVerbose(verbose, f"Parsing the file {full_xml_filepath}")
+    
+    full_prompts_filename = os.path.join(folder, prompt_filename)
+    write_dreams(extract_dreams(full_xml_filepath, verbose), full_prompts_filename, output_argument, verbose)
+    printVerbose(verbose, f"Created file: {full_prompts_filename}")
     
 def printVerbose(verbose, message):
     if verbose:
         print(message)
 
-__version__ = "v.0.5.4"
+__version__ = "v.0.5.5"
 
 def main():
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
     parser.add_argument("-f", "--file", help="Path to a PNG file")
     parser.add_argument("-F", "--folder", help="Path to a folder. File (metadata.xml) will be created with all the metadata information")
     parser.add_argument("-d", "--dreams", help="Generate a file (prompts.sdp) with the prompts to create the images stored in the xml file")
+    parser.add_argument("-r", "--recursive", action="store_true", help="This option allows the program to access the subfolders of the specified root folder")
     parser.add_argument("-o", "--output", help="Add the argument -o to each prompt stored in the prompts file")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--version", action="version", version=__version__)
@@ -148,6 +161,7 @@ def main():
     xml_file = "metadata.xml"
     dreams = args.dreams
     prompts = "prompts.sdp"
+    recursive = args.recursive
     output = args.output
     verbose = args.verbose
     
@@ -176,24 +190,27 @@ def main():
         print("Metadata: "+str(metadata))
         
     if folder:
-        printVerbose(verbose, "Selected: Metadata file generation")
-        write_xml_document(folder, xml_file, verbose)
-        
+        try:
+            if not recursive:
+                 printVerbose(verbose, "Selected: Metadata file generation. No recursive.")
+                 write_xml_document(folder, xml_file, verbose)
+            else:
+                 printVerbose(verbose, "Selected: Metadata file generation. Recursive.")
+                 for root, dirs, files in os.walk(folder):
+                     printVerbose(verbose, f"Processing folder: {root}")
+                     write_xml_document(root, xml_file, verbose)
+        except OSError as e:
+            print(f"Error creating the XML information in folder {folder}: {e} ")
+            
     if dreams:
         try:
-            #Check if the file metadata.xml exists in the folder specified in the argument dreams.
-            printVerbose(verbose, "Selected: Prompts file generation")
-            if not os.path.isfile(os.path.join(dreams, xml_file)):
-                #The xml file has not been generated yet. Generate the xml file
-                printVerbose(verbose, f"File {xml_file} not found. Generating new file")
-                write_xml_document(dreams, xml_file, verbose)
-        
-            #Read the xml file and put every dream in the sdp file
-            full_xml_filepath = os.path.join(dreams, xml_file)
-            printVerbose(verbose, f"Parsing the file {full_xml_filepath}")
-                
-            doc = ET.parse(full_xml_filepath)
-            create_dreams_file(verbose, doc, os.path.join(dreams, prompts), output)
+            if not recursive:
+                printVerbose(verbose, "Selected: Prompts file generation. No recursive.")
+                create_dreams_file(dreams, prompts, output, xml_file, verbose)
+            else:
+                printVerbose(verbose, "Selected: Prompts file generation. Recursive.")
+                for root, dirs, files in os.walk(dreams):
+                    create_dreams_file(root, prompts, output, xml_file, verbose)
         except OSError as e:
             print(f"Error processing the dreams in the folder {dreams}: {e}")
          
