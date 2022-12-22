@@ -21,7 +21,7 @@ def process_png_file(file, verbose=False):
 
     return metadata, size
 
-def create_image_element(doc, filename, file_path, metadata, size):
+def create_image_element(doc, filename, file_path, metadata, size, ckpt):
     """Create an XML element for an image."""
     element = ET.Element("image")
     element.set("filename", filename)
@@ -40,11 +40,33 @@ def create_image_element(doc, filename, file_path, metadata, size):
             # create a new element for the sd-metadata
             sd_element = ET.SubElement(element, key)
 
+            # add ckpt tag if exists
+            if ckpt:
+                ckpt_element = ET.SubElement(sd_element, "ckpt")
+                ckpt_element.text = ckpt
+                
             # loop through the elements in the sd-metadata
             for sd_key, sd_value in sd_metadata.items():
-                # add the value as a text node to the XML element
-                sub_element = ET.SubElement(sd_element, sd_key)
-                sub_element.text = str(sd_value)
+                if sd_key == "image":
+                    # parse the string value of image as JSON. The keys are
+                    # coded with single quotes, it is required to replace
+                    # them with double quotes
+                    sd_value = str(sd_value).replace("'", '"')
+                    # Required to replace None per null
+                    sd_value = sd_value.replace("None", "null")
+
+                    sd_image = json.loads(sd_value)
+                    
+                    # loop through the elements in the image
+                    for img_key, img_value in sd_image.items():
+                        # add the value as a text node to the XML element
+                        sub_element = ET.SubElement(sd_element, img_key)
+                        sub_element.text = str(img_value)
+                        
+                else:
+                    # add the value as a text node to the XML element
+                    sub_element = ET.SubElement(sd_element, sd_key)
+                    sub_element.text = str(sd_value)
         else:
             # add the value as a text node to the XML element
             sub_element = ET.SubElement(element, key)
@@ -52,7 +74,7 @@ def create_image_element(doc, filename, file_path, metadata, size):
 
     return element
 
-def create_xml_document(folder, verbose=False):
+def create_xml_document(folder, ckpt, verbose=False):
     """Create an XML document containing metadata for all PNG files in a folder."""
     # create the root element
     root = ET.Element("metadata")
@@ -69,7 +91,7 @@ def create_xml_document(folder, verbose=False):
             continue
 
         # create an XML element for the image
-        element = create_image_element(root, filename, file_path, metadata, size)
+        element = create_image_element(root, filename, file_path, metadata, size, ckpt)
         root.append(element)
 
     # create an XML document from the root element
@@ -80,11 +102,11 @@ def create_xml_document(folder, verbose=False):
 
     return xml_string
 
-def write_xml_document(folder, filename, verbose):
+def write_xml_document(folder, filename, ckpt, verbose):
     """Write an XML document to a file."""
     try:
         # Create XML document
-        xml_string = create_xml_document(folder, verbose=verbose)
+        xml_string = create_xml_document(folder, ckpt, verbose=verbose)
     
         # Write XML document to file
         output_path = os.path.join(str(folder), str(filename))
@@ -128,7 +150,7 @@ def create_dreams_file(folder, prompt_filename, output_argument, xml_file, verbo
     if not os.path.isfile(os.path.join(folder, xml_file)):
         #The xml file has not been generated yet. Generate the xml file
         printVerbose(verbose, f"File {xml_file} not found. Generating new file")
-        write_xml_document(folder, xml_file, verbose)
+        write_xml_document(folder, xml_file, None, verbose)
         
     #Read the xml file and put every dream in the sdp file
     full_xml_filepath = os.path.join(folder, xml_file)
@@ -142,7 +164,7 @@ def printVerbose(verbose, message):
     if verbose:
         print(message)
 
-__version__ = "v.0.5.5"
+__version__ = "v.0.6.0"
 
 def main():
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
@@ -151,6 +173,7 @@ def main():
     parser.add_argument("-d", "--dreams", help="Generate a file (prompts.sdp) with the prompts to create the images stored in the xml file")
     parser.add_argument("-r", "--recursive", action="store_true", help="This option allows the program to access the subfolders of the specified root folder")
     parser.add_argument("-o", "--output", help="Add the argument -o to each prompt stored in the prompts file")
+    parser.add_argument("-c", "--ckpt", help="Set manually the ckpt model used to generate the images")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--version", action="version", version=__version__)
     
@@ -163,6 +186,7 @@ def main():
     prompts = "prompts.sdp"
     recursive = args.recursive
     output = args.output
+    ckpt = args.ckpt
     verbose = args.verbose
     
     if verbose:
@@ -193,12 +217,12 @@ def main():
         try:
             if not recursive:
                  printVerbose(verbose, "Selected: Metadata file generation. No recursive.")
-                 write_xml_document(folder, xml_file, verbose)
+                 write_xml_document(folder, xml_file, ckpt, verbose)
             else:
                  printVerbose(verbose, "Selected: Metadata file generation. Recursive.")
                  for root, dirs, files in os.walk(folder):
                      printVerbose(verbose, f"Processing folder: {root}")
-                     write_xml_document(root, xml_file, verbose)
+                     write_xml_document(root, xml_file, ckpt, verbose)
         except OSError as e:
             print(f"Error creating the XML information in folder {folder}: {e} ")
             
