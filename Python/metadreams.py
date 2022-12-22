@@ -7,7 +7,7 @@ from xml.dom import minidom
 from PIL import Image
 
 def process_png_file(file, verbose=False):
-    """Extract metadata and size from a PNG file."""
+    """Extracts metadata and size from a PNG file."""
     printVerbose(verbose, f"Processing file: {file}...")
 
     try:
@@ -21,16 +21,54 @@ def process_png_file(file, verbose=False):
 
     return metadata, size
 
+def add_single_element(element, key, value):
+    """Adds a single value subelement (<key>value</key>) in the specified xml tag"""
+    subelement = ET.SubElement(element, key.lower())
+    subelement.text = value
+
+def add_multi_element(element, key):
+    """Adds a subelement in the specified xml tag that can contain multiple subelements"""
+    subelement = ET.SubElement(element, key.lower())
+    
+    return subelement
+
+def add_attr_element(element, key, value):
+    """Adds an attribute to a specified tag (<tag attribute="value">)"""
+    element.set(key.lower(), value)
+
+def parse_image_info(value):
+    """"Prepares the json info read from the tag 'image' inside the 'sd-metadata' and return the dictionary with the json info"""
+    if value == None:
+        return None
+        
+    # parse the string value of image as JSON. The keys are
+    # coded with single quotes, it is required to replace
+    # them with double quotes
+    value = str(value).replace("'", '"')
+    # Required to replace None per null
+    value = value.replace("None", "null")
+
+    sd_image = json.loads(value)
+    return sd_image
+    
+def write_image_info(element, dict_image):
+    """"Writes inside the xml tag 'sd_metadata' the data stored in the json dict image"""
+    if not dict_image == None:
+        # loop through the elements in the image
+        for img_key, img_value in dict_image.items():
+            # add the value as a text node to the XML element
+            add_single_element(element, img_key, str(img_value))
+
 def create_image_element(doc, filename, file_path, metadata, size, ckpt):
-    """Create an XML element for an image."""
+    """Creates an XML element for an image."""
     element = ET.Element("image")
-    element.set("filename", filename)
+    add_attr_element(element, "filename", filename)
 
-    path_element = ET.SubElement(element, "path")
-    path_element.text = file_path
+    # add the image filepath
+    add_single_element(element, "path", file_path)
 
-    size_element = ET.SubElement(element, "size")
-    size_element.text = str(size)
+    # add the image size
+    add_single_element(element, "size", str(size))
 
     for key, value in metadata.items():
         if key == "sd-metadata":
@@ -38,46 +76,32 @@ def create_image_element(doc, filename, file_path, metadata, size, ckpt):
             sd_metadata = json.loads(value)
 
             # create a new element for the sd-metadata
-            sd_element = ET.SubElement(element, key)
+            sd_element = add_multi_element(element, key)
 
             # add ckpt tag if exists
             if ckpt:
-                ckpt_element = ET.SubElement(sd_element, "ckpt")
-                ckpt_element.text = ckpt
+                add_single_element(sd_element, "ckpt", ckpt)
                 
             # loop through the elements in the sd-metadata
             for sd_key, sd_value in sd_metadata.items():
                 if sd_key == "image":
-                    # parse the string value of image as JSON. The keys are
-                    # coded with single quotes, it is required to replace
-                    # them with double quotes
-                    sd_value = str(sd_value).replace("'", '"')
-                    # Required to replace None per null
-                    sd_value = sd_value.replace("None", "null")
-
-                    sd_image = json.loads(sd_value)
-                    
-                    # loop through the elements in the image
-                    for img_key, img_value in sd_image.items():
-                        # add the value as a text node to the XML element
-                        sub_element = ET.SubElement(sd_element, img_key)
-                        sub_element.text = str(img_value)
-                        
+                    sd_image = parse_image_info(sd_value)
+                    write_image_info(sd_element, sd_image)
                 else:
                     # add the value as a text node to the XML element
-                    sub_element = ET.SubElement(sd_element, sd_key)
-                    sub_element.text = str(sd_value)
+                    add_single_element(sd_element, sd_key, str(sd_value))
+                    
         else:
             # add the value as a text node to the XML element
-            sub_element = ET.SubElement(element, key)
-            sub_element.text = value
+            add_single_element(element, key, value)
 
     return element
 
 def create_xml_document(folder, ckpt, verbose=False):
-    """Create an XML document containing metadata for all PNG files in a folder."""
-    # create the root element
+    """Creates an XML document containing metadata for all PNG files in a folder."""
+    # create the root element and adds an argument for software and version
     root = ET.Element("metadata")
+    add_attr_element(root, "software", f"MetaDreams {__version__}")
 
     # loop through all the png files in the given directory
     for filename in os.listdir(folder):
@@ -103,7 +127,7 @@ def create_xml_document(folder, ckpt, verbose=False):
     return xml_string
 
 def write_xml_document(folder, filename, ckpt, verbose):
-    """Write an XML document to a file."""
+    """Writes an XML document to a file."""
     try:
         # Create XML document
         xml_string = create_xml_document(folder, ckpt, verbose=verbose)
@@ -120,7 +144,7 @@ def write_xml_document(folder, filename, ckpt, verbose):
 
 
 def extract_dreams(xml_filepath, verbose):
-    """Extract the "Dream" field from the metadata file and returns an array with the dreams"""
+    """Extracts the "Dream" field from the metadata file and returns an array with the dreams"""
     dreams = []
     doc = ET.parse(xml_filepath)
 
@@ -164,7 +188,7 @@ def printVerbose(verbose, message):
     if verbose:
         print(message)
 
-__version__ = "v.0.6.0"
+__version__ = "v.0.6.1"
 
 def main():
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
