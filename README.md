@@ -1,7 +1,9 @@
 # Py_DreamsKit
 
-Python version of the DreamsKit
+## Python version of the DreamsKit
 
-Program that reads the metadata from a file or a folder and stores it in an XML file.
+### MetaDreams 
+Program that reads the metadata from the images generated with the toolkit InvokeAI for Stable Diffusion. It prints in the screen for a single image, or stores the metadata in an XML file if it is selected a folder.
+
 
 > Written with [StackEdit](https://stackedit.io/).
