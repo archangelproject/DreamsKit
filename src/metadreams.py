@@ -224,7 +224,7 @@ def main():
         print("Error: You cannot specify both a file and to generate the dreams file")
     
     if not png_file and not folder and not dreams:
-        print("Error: You must specify either a file or a folder.")
+        parser.error("You must specify either a file or a folder. For more info please use the argument -h or --help")
         return
     
     if png_file:
