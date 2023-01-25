@@ -164,6 +164,7 @@ def create_xml_document(folder, ckpt):
     root = ET.Element("metadata")
     add_attr_element(root, "software", f"MetaDreams {__version__}")
 
+    folder_element = add_multi_element(root, "folder")
     # loop through all the png files in the given directory
     for filename in os.listdir(folder):
         if not filename.endswith(".png"):
@@ -176,8 +177,8 @@ def create_xml_document(folder, ckpt):
             continue
 
         # create an XML element for the image
-        element = create_image_element(root, filename, file_path, metadata, size, ckpt)
-        root.append(element)
+        element = create_image_element(folder_element, filename, file_path, metadata, size, ckpt)
+        folder_element.append(element)
 
     # create an XML document from the root element
     doc = ET.ElementTree(root)
@@ -352,9 +353,11 @@ def main():
             try:
                 folder = file
                 if not recursive:
+                    # Not recursive
                     printVerbose("Selected: Metadata file generation. No recursive.")
                     write_xml_document(folder, xml_file, ckpt)
                 else:
+                    # Recursive
                     printVerbose("Selected: Metadata file generation. Recursive.")
                     for root, dirs, files in os.walk(folder):
                         printVerbose(f"Processing folder: {root}")
