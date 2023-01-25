@@ -6,7 +6,11 @@ from xml.dom import minidom
 
 from PIL import Image
 
-VERBOSE = False
+#Global variable
+VERBOSE: bool = False
+MESSAGE_INFO: int = 2
+MESSAGE_FATAL_ERROR: int = 1
+MESSAGE_WARNING: int = 0
 
 
 def process_png_file(file):
@@ -246,7 +250,7 @@ def write_dreams(dreams, output_file, output_generation):
 
 def create_dreams_file(folder, prompt_filename, output_argument, xml_file):
     """
-    Creates the file cotaining the dreams (prompts) read in the xml file
+    Creates the file containing the dreams (prompts) read in the xml file
     :param folder The folder where the file will be stored
     :param prompt_filename The name of the file with the prompts
     :param output_argument Optional argument, it contains the route to add to the parameter -o of the prompt
@@ -277,6 +281,19 @@ def printVerbose(message):
         print(message)
 
 
+def printMessage(message: object, type: object) -> object:
+    if type == MESSAGE_WARNING:
+        message = " ".join(['WARNING:', message])
+    elif type == MESSAGE_FATAL_ERROR:
+        message = " ".join(['ERROR:', message])
+    elif type == MESSAGE_INFO:
+        message = " ".join(['INFO:', message])
+
+    print(message)
+
+    if type == MESSAGE_FATAL_ERROR:
+        exit(MESSAGE_FATAL_ERROR)
+
 __version__ = "v.0.6.1"
 
 
@@ -286,9 +303,9 @@ def main():
     and the creation of the XML document.
     """
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
-    parser.add_argument("-f", "--file", help="Path to a PNG file")
-    parser.add_argument("-F", "--folder",
-                        help="Path to a folder. File (metadata.xml) will be created with all the metadata information")
+    parser.add_argument("-f", "--file", help="Path to a PNG file or a folder. If a file is selected, the metadata info"
+                        "of the file is shown in screen. If a folder is selected, the file metadata.xml will be "
+                        "created with all the metadata information.")
     parser.add_argument("-d", "--dreams",
                         help="Generate a file (prompts.sdp) with the prompts to create the images stored in the xml "
                              "file")
@@ -301,51 +318,51 @@ def main():
 
     args = parser.parse_args()
 
-    png_file = args.file
-    folder = args.folder
+    file = args.file
     xml_file = "metadata.xml"
     dreams = args.dreams
     prompts = "prompts.sdp"
     recursive = args.recursive
     output = args.output
     ckpt = args.ckpt
+
+    global VERBOSE
     VERBOSE = args.verbose
 
     printVerbose("Verbose mode enabled")
 
-    if png_file and folder:
-        print("Error: You cannot specify both a file and a folder.")
-        return
+    if file and dreams:
+        printMessage("You cannot specify both a file and to generate the dreams file", MESSAGE_WARNING)
 
-    if png_file and dreams:
-        print("Error: You cannot specify both a file and to generate the dreams file")
-
-    if not png_file and not folder and not dreams:
+    if not file and not dreams:
         parser.error("You must specify either a file or a folder. For more info please use the argument -h or --help")
         return
 
-    if png_file:
-        metadata, size = process_png_file(png_file)
-        if metadata is None or size is None:
-            print(f"Error: Could not extract metadata from {png_file}")
-            return
+    if file:
+        if os.path.isfile(file):
+            metadata, size = process_png_file(file)
+            if metadata is None or size is None:
+                printMessage(f"Could not extract metadata from {file}", MESSAGE_FATAL_ERROR)
+                return
 
-        print("Metadata for PNG file:")
-        print("Size: " + str(size))
-        print("Metadata: " + str(metadata))
-
-    if folder:
-        try:
-            if not recursive:
-                printVerbose("Selected: Metadata file generation. No recursive.")
-                write_xml_document(folder, xml_file, ckpt)
-            else:
-                printVerbose("Selected: Metadata file generation. Recursive.")
-                for root, dirs, files in os.walk(folder):
-                    printVerbose(f"Processing folder: {root}")
-                    write_xml_document(root, xml_file, ckpt)
-        except OSError as e:
-            print(f"Error creating the XML information in folder {folder}: {e} ")
+            printMessage("Metadata for PNG file:", MESSAGE_INFO)
+            printMessage("Size: " + str(size), MESSAGE_INFO)
+            printMessage("Metadata: " + str(metadata), MESSAGE_INFO)
+        elif os.path.isdir(file):
+            try:
+                folder = file
+                if not recursive:
+                    printVerbose("Selected: Metadata file generation. No recursive.")
+                    write_xml_document(folder, xml_file, ckpt)
+                else:
+                    printVerbose("Selected: Metadata file generation. Recursive.")
+                    for root, dirs, files in os.walk(folder):
+                        printVerbose(f"Processing folder: {root}")
+                        write_xml_document(root, xml_file, ckpt)
+            except OSError as e:
+                printMessage(f"Error creating the XML information in folder {folder}: {e} ", MESSAGE_FATAL_ERROR)
+        else:
+            printMessage(f"The file {file} is not a file or a folder". ERROR_WARNING)
 
     if dreams:
         try:
@@ -357,11 +374,11 @@ def main():
                 for root, dirs, files in os.walk(dreams):
                     create_dreams_file(root, prompts, output, xml_file)
         except OSError as e:
-            print(f"Error processing the dreams in the folder {dreams}: {e}")
+            printMessage(f"Error processing the dreams in the folder {dreams}: {e}", MESSAGE_FATAL_ERROR)
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(e)
+        printMessage(e, MESSAGE_FATAL_ERROR)
