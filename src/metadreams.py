@@ -1,17 +1,32 @@
 import argparse
 import json
 import os
+import traceback
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
 from PIL import Image
 
-#Global variable
+# Global variables
+
+__version__ = "v.0.6.1"
+
 VERBOSE: bool = False
+
 MESSAGE_INFO: int = 2
 MESSAGE_FATAL_ERROR: int = 1
 MESSAGE_WARNING: int = 0
 
+KEY_FOLDER: str = 'folder'
+KEY_FOLDER_NAME: str = 'name'
+KEY_FOLDER_PATH: str = 'path'
+KEY_IMAGE: str = 'image'
+KEY_IMAGE_PATH: str = 'path'
+KEY_CKPT: str = 'ckpt'
+KEY_DREAM: str = 'dream'
+
+FILE_METADATA = 'metadata.xml'
+FILE_PROMPTS = 'prompts.sdp'
 
 def process_png_file(file):
     """
@@ -19,7 +34,7 @@ def process_png_file(file):
     :param file: The PNG file to process
     :return: A tuple containing the metadata and size of the image
     """
-    printVerbose(f"Processing file: {file}...")
+    print_verbose(f"Processing file: {file}...")
 
     try:
         with Image.open(file) as im:
@@ -76,7 +91,7 @@ def parse_image_info(value):
     :return: A dictionary with the json info
     """
 
-    if value == None:
+    if value is None:
         return None
 
     # parse the string value of image as JSON. The keys are
@@ -97,14 +112,14 @@ def write_image_info(element, dict_image):
     :param dict_image: The dictionary with the image information
     """
 
-    if not dict_image == None:
+    if not dict_image is None:
         # loop through the elements in the image
         for img_key, img_value in dict_image.items():
             # add the value as a text node to the XML element
             add_single_element(element, img_key, str(img_value))
 
 
-def create_image_element(doc, filename, file_path, metadata, size, ckpt):
+def create_image_element(file_path, metadata, size, ckpt):
     """
     Creates an XML element for an image.
     :param doc: The xml document where the element will be added
@@ -117,7 +132,7 @@ def create_image_element(doc, filename, file_path, metadata, size, ckpt):
     """
 
     element = ET.Element("image")
-    add_attr_element(element, "filename", filename)
+    add_attr_element(element, "filename", os.path.basename(file_path))
 
     # add the image filepath
     add_single_element(element, "path", file_path)
@@ -135,11 +150,11 @@ def create_image_element(doc, filename, file_path, metadata, size, ckpt):
 
             # add ckpt tag if exists
             if ckpt:
-                add_single_element(sd_element, "ckpt", ckpt)
+                add_single_element(sd_element, KEY_CKPT, ckpt)
 
             # loop through the elements in the sd-metadata
             for sd_key, sd_value in sd_metadata.items():
-                if sd_key == "image":
+                if sd_key == KEY_IMAGE:
                     sd_image = parse_image_info(sd_value)
                     write_image_info(sd_element, sd_image)
                 else:
@@ -153,35 +168,69 @@ def create_image_element(doc, filename, file_path, metadata, size, ckpt):
     return element
 
 
-def create_xml_document(folder, ckpt):
+def create_folder_element(xml_element, folder, recursive, ckpt):
     """
-    Creates an XML document containing metadata for all PNG files in a folder.
-    :param folder: The folder containing the PNG files.
-    :param ckpt: The checkpoint name.
+    Creates an xml element for the folder that contains the information of the images in that folder
+    :param xml_element The xml element to add the information of the specified folder
+    :param folder The folder containing the PNG files
+    :param recursive Parameter that enables the retrieval of information from the sub-folders
+    :param ckpt The checkpoint name.
+    """
+
+    folder_element = add_multi_element(xml_element, KEY_FOLDER)
+    add_attr_element(folder_element, KEY_FOLDER_NAME, os.path.basename(folder))
+    add_attr_element(folder_element, KEY_FOLDER_PATH, folder)
+    # loop through all the files in the given directory
+    for filename in os.listdir(folder):
+        filename = os.path.join(folder, filename)
+        if os.path.isdir(filename) and recursive:
+            print_verbose(f"Processing folder: {filename} ...")
+            create_folder_element(folder_element, filename, recursive, ckpt)
+
+        elif os.path.isfile(filename) and filename.endswith(".png"):
+            metadata, size = process_png_file(filename)
+
+            if metadata is None or size is None:
+                continue
+
+            # create an XML element for the image
+            element = create_image_element(filename, metadata, size, ckpt)
+            folder_element.append(element)
+
+    return folder_element
+
+
+def check_metadata_file_overwrite(folder):
+    if os.path.exists(os.path.join(folder, FILE_METADATA)):
+        response = input(f"File {FILE_METADATA} already exists, do you want to overwrite it? (yes/no): ")
+        if response.lower() == "yes" or response.lower() == "y":
+            # File exists and user allows to overwrite it, green light for generating new one
+            print_verbose(f"{FILE_METADATA} exists. Authorized to overwrite")
+            return True
+        else:
+            # File exists but user selects not to overwrite it, red light for generating new one
+            print_verbose(f"{FILE_METADATA} exists. NOT authorized to overwrite")
+            return False
+    else:
+        # File doesn't exist, green light for generating file
+        print_verbose(f"{FILE_METADATA} doesn't exist. Proceeding to generate it")
+        return True
+
+
+def create_xml_document(folder, recursive, ckpt):
+    """
+    Creates an XML document containing metadata for all PNG files in a folder
+    :param folder The folder containing the PNG files
+    :param recursive Parameter that enables the retrieval of information from the sub-folders
+    :param ckpt The checkpoint name.
+    :return: The string that contains all the xml information
     """
 
     # create the root element and adds an argument for software and version
     root = ET.Element("metadata")
     add_attr_element(root, "software", f"MetaDreams {__version__}")
 
-    folder_element = add_multi_element(root, "folder")
-    # loop through all the png files in the given directory
-    for filename in os.listdir(folder):
-        if not filename.endswith(".png"):
-            continue
-
-        file_path = os.path.join(folder, filename)
-        metadata, size = process_png_file(file_path)
-
-        if metadata is None or size is None:
-            continue
-
-        # create an XML element for the image
-        element = create_image_element(folder_element, filename, file_path, metadata, size, ckpt)
-        folder_element.append(element)
-
-    # create an XML document from the root element
-    doc = ET.ElementTree(root)
+    create_folder_element(root, folder, recursive, ckpt)
 
     # create a pretty string representation of the XML document
     xml_string = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
@@ -189,48 +238,28 @@ def create_xml_document(folder, ckpt):
     return xml_string
 
 
-def write_xml_document(folder, filename, ckpt):
+def write_xml_document(folder, filename, recursive, ckpt):
     """
     Writes the XML document to a file
-    :param root: The root element of the XML document
+    :param folder: The root element of the XML document
     :param filename: The name of the file to write the XML document to
+    :param recursive Parameter that enables the recursive generation of metadata inside the subfolders
     :param ckpt The optional argument to add in the metadata information the ckpt model used to generate the images
     """
 
     try:
         # Create XML document
-        xml_string = create_xml_document(folder, ckpt)
+        xml_string = create_xml_document(folder, recursive, ckpt)
 
         # Write XML document to file
         output_path = os.path.join(str(folder), str(filename))
         with open(output_path, "w") as f:
             f.write(xml_string)
 
-        printVerbose(f"XML file created: {output_path}")
+        print_verbose(f"XML file created: {output_path}")
     except OSError as e:
         # handle the error and provide a more informative error message
         print(f"Error writing XML file {folder}: {type(e)}: {e}")
-
-
-def extract_dreams(xml_filepath):
-    """
-    Extracts the "Dream" field from the metadata file and returns an array with the dreams
-    :param xml_filepath: The filepath to the xml cotaining the metadata where the dreams are stored
-    :return: The list of dreams (prompts)
-    """
-    dreams = []
-    doc = ET.parse(xml_filepath)
-
-    # loop through all the image elements in the document
-    for image in doc.iter("image"):
-        # find the Dream element
-        dream = image.find("Dream")
-        if dream is not None:
-            # add the text of the Dream element to the list
-            dreams.append(dream.text)
-            printVerbose(f"Found dream: {dream.text}")
-
-    return dreams
 
 
 def write_dreams(dreams, output_file, output_generation):
@@ -238,64 +267,96 @@ def write_dreams(dreams, output_file, output_generation):
     Writes the list of dreams (prompts) into the specified file
     :param dreams The list of dreams to be written in the file
     :param output_file The filepath of the file to store the dreams
-    :param output_generation Optional argument to add the argument -o to the prompts. This argument contains the folder path to be added
+    :param output_generation Optional argument to add the argument -o to the prompts. This argument contains the "
+    "folder path to be added
     """
     with open(output_file, "w") as f:
         if output_generation:
-            printVerbose(f"Output to be added: {output_generation}")
+            print_verbose(f"Output to be added: {output_generation}")
         for dream in dreams:
-            if output_generation:
-                dream = dream + " -o " + output_generation
             f.write(dream + "\n")
 
 
-def create_dreams_file(folder, prompt_filename, output_argument, xml_file):
+def parse_metadata_xml_file(xml_file):
+    """
+    Parses the metadata.xml file
+    :param xml_file The file path to the xml file
+    :return: The document containing all the info in the metadata file
+    """
+    print_verbose(f"Parsing the file {xml_file}")
+    return ET.parse(xml_file)
+
+
+def get_all_prompts(xml_document, recursive, output):
+    """
+    Navigates the xml document and extracts all the prompts found
+    :param xml_document The xml document containing the metadata information
+    :param output Enables the adding of the -o parameter into the prompt
+    :return: An array containing the prompts
+    """
+    dreams = []
+    # loop through all the image elements in the document
+    for image in xml_document.iter(KEY_IMAGE):
+        # find the Dream element
+        dream = image.find(KEY_DREAM)
+        if dream is not None:
+            # add the text of the Dream element to the list
+            prompt = dream.text
+            if output:
+                img_path = image.find(KEY_IMAGE_PATH).text
+                img_path = os.path.dirname(img_path)
+                prompt = " -o ".join([prompt, img_path])
+            dreams.append(prompt)
+            print_verbose(f"Found dream: {prompt}")
+
+    return dreams
+
+
+def create_dreams_file(folder, prompt_filename, xml_file, recursive, output_argument):
     """
     Creates the file containing the dreams (prompts) read in the xml file
     :param folder The folder where the file will be stored
     :param prompt_filename The name of the file with the prompts
-    :param output_argument Optional argument, it contains the route to add to the parameter -o of the prompt
     :param xml_file Filepath of the xml to be read in order to get the prompts
+    :param recursive Reads the xml file recursively to retrieve the info in the sub-folders
+    :param output_argument Optional argument, it contains the route to add to the parameter -o of the prompt
     """
+
     # Check if the file metadata.xml exists in the folder specified in the argument dreams.
-    if not os.path.isfile(os.path.join(folder, xml_file)):
+    xml_path = os.path.join(folder, xml_file)
+    prompts_filepath = os.path.join(folder, prompt_filename)
+    if not os.path.isfile(xml_path):
         # The xml file has not been generated yet. Generate the xml file
-        printVerbose(f"File {xml_file} not found. Generating new file")
-        write_xml_document(folder, xml_file, None)
+        print_verbose(f"File {xml_file} not found. Generating new file")
+        write_xml_document(folder, xml_file, recursive, None)
 
     # Read the xml file and put every dream in the sdp file
-    full_xml_filepath = os.path.join(folder, xml_file)
-    printVerbose(f"Parsing the file {full_xml_filepath}")
-
-    full_prompts_filename = os.path.join(folder, prompt_filename)
-    write_dreams(extract_dreams(full_xml_filepath), full_prompts_filename, output_argument)
-    printVerbose(f"Created file: {full_prompts_filename}")
+    write_dreams(get_all_prompts(parse_metadata_xml_file(xml_path), recursive, output_argument), prompts_filepath, output_argument)
 
 
-def printVerbose(message):
+def print_verbose(message):
     """
     Prints a message if verbose flag is true
     :param message: The message to be printed
     """
 
     if VERBOSE:
+        message = " ".join(['VERBOSE:', message])
         print(message)
 
 
-def printMessage(message: object, type: object) -> object:
-    if type == MESSAGE_WARNING:
+def print_message(message, type_message):
+    if type_message == MESSAGE_WARNING:
         message = " ".join(['WARNING:', message])
-    elif type == MESSAGE_FATAL_ERROR:
+    elif type_message == MESSAGE_FATAL_ERROR:
         message = " ".join(['ERROR:', message])
-    elif type == MESSAGE_INFO:
+    elif type_message == MESSAGE_INFO:
         message = " ".join(['INFO:', message])
 
     print(message)
 
-    if type == MESSAGE_FATAL_ERROR:
+    if type_message == MESSAGE_FATAL_ERROR:
         exit(MESSAGE_FATAL_ERROR)
-
-__version__ = "v.0.6.1"
 
 
 def main():
@@ -304,17 +365,32 @@ def main():
     and the creation of the XML document.
     """
     parser = argparse.ArgumentParser(description="Process PNG files and generate an XML file with metadata.")
+
+    # -f --file
     parser.add_argument("-f", "--file", help="Path to a PNG file or a folder. If a file is selected, the metadata info"
-                        "of the file is shown in screen. If a folder is selected, the file metadata.xml will be "
-                        "created with all the metadata information.")
+                                             "of the file is shown in screen. If a folder is selected, the file "
+                                             "metadata.xml will be created with all the metadata information.")
+
+    # -d --dreams
     parser.add_argument("-d", "--dreams",
                         help="Generate a file (prompts.sdp) with the prompts to create the images stored in the xml "
                              "file")
+
+    # -r --recursive
     parser.add_argument("-r", "--recursive", action="store_true",
                         help="This option allows the program to access the subfolders of the specified root folder")
-    parser.add_argument("-o", "--output", help="Add the argument -o to each prompt stored in the prompts file")
+
+    # -o --output
+    parser.add_argument("-o", "--output", action="store_true", help="Adds the parameter -o to the prompt in order to "
+                        "be generated in the same folder that is specified in the xml file")
+
+    # -c --ckpt
     parser.add_argument("-c", "--ckpt", help="Set manually the ckpt model used to generate the images")
+
+    # -v --verbose
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+
+    # --version
     parser.add_argument("--version", action="version", version=__version__)
 
     args = parser.parse_args()
@@ -330,58 +406,55 @@ def main():
     global VERBOSE
     VERBOSE = args.verbose
 
-    printVerbose("Verbose mode enabled")
+    print_verbose("Verbose mode enabled")
 
     if file and dreams:
-        printMessage("You cannot specify both a file and to generate the dreams file", MESSAGE_WARNING)
+        print_message("You cannot specify both a file and to generate the dreams file", MESSAGE_WARNING)
 
     if not file and not dreams:
         parser.error("You must specify either a file or a folder. For more info please use the argument -h or --help")
         return
 
     if file:
+        ###
+        # FILE PROCESSING
+        ###
         if os.path.isfile(file):
             metadata, size = process_png_file(file)
             if metadata is None or size is None:
-                printMessage(f"Could not extract metadata from {file}", MESSAGE_FATAL_ERROR)
+                print_message(f"Could not extract metadata from {file}", MESSAGE_FATAL_ERROR)
                 return
 
-            printMessage("Metadata for PNG file:", MESSAGE_INFO)
-            printMessage("Size: " + str(size), MESSAGE_INFO)
-            printMessage("Metadata: " + str(metadata), MESSAGE_INFO)
+            print_message("Metadata for PNG file:", MESSAGE_INFO)
+            print_message("Size: " + str(size), MESSAGE_INFO)
+            print_message("Metadata: " + str(metadata), MESSAGE_INFO)
+        ###
+        # FOLDER PROCESSING
+        ###
         elif os.path.isdir(file):
             try:
-                folder = file
-                if not recursive:
-                    # Not recursive
-                    printVerbose("Selected: Metadata file generation. No recursive.")
-                    write_xml_document(folder, xml_file, ckpt)
-                else:
-                    # Recursive
-                    printVerbose("Selected: Metadata file generation. Recursive.")
-                    for root, dirs, files in os.walk(folder):
-                        printVerbose(f"Processing folder: {root}")
-                        write_xml_document(root, xml_file, ckpt)
+                if check_metadata_file_overwrite(file):
+                    folder = file
+                    print_verbose(f"Selected Folder generation. Recursive: {recursive}")
+                    write_xml_document(folder, xml_file, recursive, ckpt)
+
             except OSError as e:
-                printMessage(f"Error creating the XML information in folder {folder}: {e} ", MESSAGE_FATAL_ERROR)
+                print_message(f"Error creating the XML information in folder {folder}: {e} ", MESSAGE_FATAL_ERROR)
         else:
-            printMessage(f"The file {file} is not a file or a folder". ERROR_WARNING)
+            print_message(f"The file {file} is not a file or a folder", MESSAGE_WARNING)
 
     if dreams:
         try:
-            if not recursive:
-                printVerbose("Selected: Prompts file generation. No recursive.")
-                create_dreams_file(dreams, prompts, output, xml_file)
-            else:
-                printVerbose("Selected: Prompts file generation. Recursive.")
-                for root, dirs, files in os.walk(dreams):
-                    create_dreams_file(root, prompts, output, xml_file)
+            print_verbose(f"Selected: Prompts file generation. Recursive: {recursive}")
+            create_dreams_file(dreams, prompts, xml_file, recursive, output)
         except OSError as e:
-            printMessage(f"Error processing the dreams in the folder {dreams}: {e}", MESSAGE_FATAL_ERROR)
+            print_message(f"Error processing the dreams in the folder {dreams}: {e}", MESSAGE_FATAL_ERROR)
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        printMessage(e, MESSAGE_FATAL_ERROR)
+        # print_message(str(e), MESSAGE_FATAL_ERROR)
+        trace = traceback.format_exc()
+        print_message("\n\n".join([trace, str(e)]), MESSAGE_FATAL_ERROR)
