@@ -9,7 +9,7 @@ from PIL import Image
 
 # Global variables
 
-__version__ = "v.0.6.1"
+__version__ = "v.1.0"
 
 VERBOSE: bool = False
 
@@ -181,25 +181,43 @@ def create_folder_element(xml_element, folder, recursive, ckpt):
     add_attr_element(folder_element, KEY_FOLDER_PATH, folder)
     # loop through all the files in the given directory
     for filename in os.listdir(folder):
-        filename = os.path.join(folder, filename)
-        if os.path.isdir(filename) and recursive:
-            print_verbose(f"Processing folder: {filename} ...")
-            create_folder_element(folder_element, filename, recursive, ckpt)
+        if not is_folder_empty(folder):
+            filename = os.path.join(folder, filename)
+            if os.path.isdir(filename) and recursive:
+                print_verbose(f"Processing folder: {filename} ...")
+                create_folder_element(folder_element, filename, recursive, ckpt)
 
-        elif os.path.isfile(filename) and filename.endswith(".png"):
-            metadata, size = process_png_file(filename)
+            elif os.path.isfile(filename) and filename.endswith(".png"):
+                metadata, size = process_png_file(filename)
 
-            if metadata is None or size is None:
-                continue
+                if metadata is None or size is None:
+                    continue
 
-            # create an XML element for the image
-            element = create_image_element(filename, metadata, size, ckpt)
-            folder_element.append(element)
+                # create an XML element for the image
+                element = create_image_element(filename, metadata, size, ckpt)
+                folder_element.append(element)
+        else:
+            print_verbose(f"Folder {folder} is empty. Ignored")
 
     return folder_element
 
 
+def is_folder_empty(folder):
+    """
+    Checks if the folder is empty
+    :param folder The folder to be checked
+    :return: True if the folder is empty. Otherwise, False
+    """
+    return len(os.listdir(folder)) == 0
+
+
 def check_metadata_file_overwrite(folder):
+    """
+    Checks if the metadata file exists in the folder. If it exists, asks for permission to overwrite it
+    :param folder The folder where it is checked if the metadata file exists
+    :return: True if the metadata file does not exist or it can be overwritten. False if the metadata file exists and
+    cannot be overwritten.
+    """
     if os.path.exists(os.path.join(folder, FILE_METADATA)):
         response = input(f"File {FILE_METADATA} already exists, do you want to overwrite it? (yes/no): ")
         if response.lower() == "yes" or response.lower() == "y":
