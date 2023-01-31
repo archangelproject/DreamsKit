@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 import traceback
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as eltree
 from xml.dom import minidom
 
 from PIL import Image
@@ -28,6 +28,7 @@ KEY_DREAM: str = 'dream'
 FILE_METADATA = 'metadata.xml'
 FILE_PROMPTS = 'prompts.sdp'
 
+
 def process_png_file(file):
     """
     Extracts metadata and size from a PNG file.
@@ -40,9 +41,9 @@ def process_png_file(file):
         with Image.open(file) as im:
             metadata = im.info
             size = im.size
-    except OSError as e:
+    except OSError as exception:
         # handle the error and provide a more informative error message
-        print(f"Error processing {file}: {e}")
+        print(f"Error processing {file}: {exception}")
         return None, None
 
     return metadata, size
@@ -50,24 +51,24 @@ def process_png_file(file):
 
 def add_single_element(element, key, value):
     """
-    Adds a single value subelement (<key>value</key>) in the specified xml tag
-    :param element: The xml element where the subelement will be added
-    :param key: The key of the subelement
-    :param value: The value of the subelement
+    Adds a single value sub-element (<key>value</key>) in the specified xml tag
+    :param element: The xml element where the sub-element will be added
+    :param key: The key of the sub-element
+    :param value: The value of the sub-element
     """
 
-    subelement = ET.SubElement(element, key.lower())
+    subelement = eltree.SubElement(element, key.lower())
     subelement.text = value
 
 
 def add_multi_element(element, key):
     """
-    Adds a subelement in the specified xml tag that can contain multiple subelements
-    :param element: The xml element where the subelement will be added
-    :param key: The key of the subelement
+    Adds a subelement in the specified xml tag that can contain multiple sub-elements
+    :param element: The xml element where the sub-element will be added
+    :param key: The key of the sub-element
     """
 
-    subelement = ET.SubElement(element, key.lower())
+    subelement = eltree.SubElement(element, key.lower())
 
     return subelement
 
@@ -112,7 +113,7 @@ def write_image_info(element, dict_image):
     :param dict_image: The dictionary with the image information
     """
 
-    if not dict_image is None:
+    if dict_image is not None:
         # loop through the elements in the image
         for img_key, img_value in dict_image.items():
             # add the value as a text node to the XML element
@@ -122,8 +123,6 @@ def write_image_info(element, dict_image):
 def create_image_element(file_path, metadata, size, ckpt):
     """
     Creates an XML element for an image.
-    :param doc: The xml document where the element will be added
-    :param filename: The filename of the image
     :param file_path: The file path of the image
     :param metadata: The metadata of the image
     :param size: The size of the image
@@ -131,7 +130,7 @@ def create_image_element(file_path, metadata, size, ckpt):
     :return: The created xml element
     """
 
-    element = ET.Element("image")
+    element = eltree.Element("image")
     add_attr_element(element, "filename", os.path.basename(file_path))
 
     # add the image filepath
@@ -170,7 +169,7 @@ def create_image_element(file_path, metadata, size, ckpt):
 
 def create_folder_element(xml_element, folder, recursive, ckpt):
     """
-    Creates an xml element for the folder that contains the information of the images in that folder
+    Creates a xml element for the folder that contains the information of the images in that folder
     :param xml_element The xml element to add the information of the specified folder
     :param folder The folder containing the PNG files
     :param recursive Parameter that enables the retrieval of information from the sub-folders
@@ -227,13 +226,13 @@ def create_xml_document(folder, recursive, ckpt):
     """
 
     # create the root element and adds an argument for software and version
-    root = ET.Element("metadata")
+    root = eltree.Element("metadata")
     add_attr_element(root, "software", f"MetaDreams {__version__}")
 
     create_folder_element(root, folder, recursive, ckpt)
 
     # create a pretty string representation of the XML document
-    xml_string = minidom.parseString(ET.tostring(root)).toprettyxml(indent="  ")
+    xml_string = minidom.parseString(eltree.tostring(root)).toprettyxml(indent="  ")
 
     return xml_string
 
@@ -257,9 +256,9 @@ def write_xml_document(folder, filename, recursive, ckpt):
             f.write(xml_string)
 
         print_verbose(f"XML file created: {output_path}")
-    except OSError as e:
+    except OSError as exception:
         # handle the error and provide a more informative error message
-        print(f"Error writing XML file {folder}: {type(e)}: {e}")
+        print(f"Error writing XML file {folder}: {type(exception)}: {exception}")
 
 
 def write_dreams(dreams, output_file, output_generation):
@@ -284,10 +283,10 @@ def parse_metadata_xml_file(xml_file):
     :return: The document containing all the info in the metadata file
     """
     print_verbose(f"Parsing the file {xml_file}")
-    return ET.parse(xml_file)
+    return eltree.parse(xml_file)
 
 
-def get_all_prompts(xml_document, recursive, output):
+def get_all_prompts(xml_document, output):
     """
     Navigates the xml document and extracts all the prompts found
     :param xml_document The xml document containing the metadata information
@@ -312,26 +311,21 @@ def get_all_prompts(xml_document, recursive, output):
     return dreams
 
 
-def create_dreams_file(folder, prompt_filename, xml_file, recursive, output_argument):
+def create_dreams_file(folder, prompt_filename, xml_file, output_argument):
     """
     Creates the file containing the dreams (prompts) read in the xml file
     :param folder The folder where the file will be stored
     :param prompt_filename The name of the file with the prompts
     :param xml_file Filepath of the xml to be read in order to get the prompts
-    :param recursive Reads the xml file recursively to retrieve the info in the sub-folders
     :param output_argument Optional argument, it contains the route to add to the parameter -o of the prompt
     """
 
-    # Check if the file metadata.xml exists in the folder specified in the argument dreams.
     xml_path = os.path.join(folder, xml_file)
     prompts_filepath = os.path.join(folder, prompt_filename)
-    if not os.path.isfile(xml_path):
-        # The xml file has not been generated yet. Generate the xml file
-        print_verbose(f"File {xml_file} not found. Generating new file")
-        write_xml_document(folder, xml_file, recursive, None)
 
     # Read the xml file and put every dream in the sdp file
-    write_dreams(get_all_prompts(parse_metadata_xml_file(xml_path), recursive, output_argument), prompts_filepath, output_argument)
+    write_dreams(get_all_prompts(parse_metadata_xml_file(xml_path), output_argument), prompts_filepath,
+                 output_argument)
 
 
 def print_verbose(message):
@@ -372,7 +366,7 @@ def main():
                                              "metadata.xml will be created with all the metadata information.")
 
     # -d --dreams
-    parser.add_argument("-d", "--dreams",
+    parser.add_argument("-d", "--dreams", action="store_true",
                         help="Generate a file (prompts.sdp) with the prompts to create the images stored in the xml "
                              "file")
 
@@ -408,10 +402,7 @@ def main():
 
     print_verbose("Verbose mode enabled")
 
-    if file and dreams:
-        print_message("You cannot specify both a file and to generate the dreams file", MESSAGE_WARNING)
-
-    if not file and not dreams:
+    if not file:
         parser.error("You must specify either a file or a folder. For more info please use the argument -h or --help")
         return
 
@@ -438,17 +429,17 @@ def main():
                     print_verbose(f"Selected Folder generation. Recursive: {recursive}")
                     write_xml_document(folder, xml_file, recursive, ckpt)
 
-            except OSError as e:
-                print_message(f"Error creating the XML information in folder {folder}: {e} ", MESSAGE_FATAL_ERROR)
+            except OSError as exception:
+                print_message(f"Error creating the XML information in folder {file}: {exception} ", MESSAGE_FATAL_ERROR)
         else:
             print_message(f"The file {file} is not a file or a folder", MESSAGE_WARNING)
 
     if dreams:
         try:
             print_verbose(f"Selected: Prompts file generation. Recursive: {recursive}")
-            create_dreams_file(dreams, prompts, xml_file, recursive, output)
-        except OSError as e:
-            print_message(f"Error processing the dreams in the folder {dreams}: {e}", MESSAGE_FATAL_ERROR)
+            create_dreams_file(file, prompts, xml_file, output)
+        except OSError as exception:
+            print_message(f"Error processing the dreams in the folder {dreams}: {exception}", MESSAGE_FATAL_ERROR)
 
 
 if __name__ == "__main__":
